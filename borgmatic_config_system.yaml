@@ -3,17 +3,22 @@
 # For example, if you have a constant named "hostname" with the value
 # "myhostname", then the string "{hostname}" will be replaced with
 # "myhostname" in the configuration file.
-# constants:
-    # hostname: myhostname
-    # prefix: myprefix
+constants:
+    repository_dir: backups
+    repository_name: system
+    prefix: system
+    # Set in ~/.profile
+    # export BACKUP_USER="user"
+    # export BORG_PASSPHRASE="passphrase"
+    # export HEALTHCHECKS_PING_URL_SYSTEM="https://hc-ping.com/your-uuid-here"
+    # export CRONITOR_PING_URL_SYSTEM="https://cronitor.link/d3x0c1"
+
 
 # List of source directories and files to back up. Globs and tildes
 # are expanded. Do not backslash spaces in path names.
+# As we want to create a full system backup "/" is sufficient.
 source_directories:
-    - /home
-    - /etc
-    - /var/log/syslog*
-    - /home/user/path with spaces
+    - /
 
 # A required list of local or remote repositories with paths and
 # optional labels (which can be used with the --repository flag to
@@ -25,10 +30,8 @@ source_directories:
 # ReadWritePaths list. Prior to borgmatic 1.7.10, repositories was a
 # list of plain path strings.
 repositories:
-    - path: ssh://user@backupserver/./sourcehostname.borg
-      label: backupserver
-    - path: /mnt/backup
-      label: local
+    - path: ssh://${BACKUP_USER}@${BACKUP_USER}.your-storagebox.de:23/./{repository_dir}/{repository_name}
+      label: backup_{repository_name}
 
 # Working directory for the "borg create" command. Tildes are
 # expanded. Useful for backing up using relative paths. See
@@ -106,6 +109,20 @@ repositories:
     # - '*/.vim*.tmp'
     # - /etc/ssl
     # - /home/user/path with spaces
+exclude_patterns:
+    - home/*/.cache/*
+    - var/cache/*
+    - var/tmp/*
+    - /dev
+    - /proc
+    - /sys
+    - /var/run
+    - /run
+    - /mnt
+    - /tmp
+    - /lost+found
+
+    - /srv/VBox
 
 # Read exclude patterns from one or more separate named files, one
 # pattern per line. See the output of "borg help patterns" for more
@@ -116,7 +133,7 @@ repositories:
 # Exclude directories that contain a CACHEDIR.TAG file. See
 # http://www.brynosaurus.com/cachedir/spec.html for details. Defaults
 # to false.
-# exclude_caches: true
+exclude_caches: true
 
 # Exclude directories that contain a file with the given filenames.
 # Defaults to not set.
@@ -140,7 +157,7 @@ repositories:
 # Store configuration files used to create a backup in the backup
 # itself. Defaults to true. Changing this to false prevents "borgmatic
 # bootstrap" from extracting configuration files from the backup.
-# store_config_files: true
+store_config_files: false
 
 # If true, then source directories must exist, otherwise an error is
 # raised. Defaults to false.
@@ -158,12 +175,12 @@ repositories:
 # encryption. Quote the value if it contains punctuation, so it parses
 # correctly. And backslash any quote or backslash literals as well.
 # Defaults to not set.
-# encryption_passphrase: "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+encryption_passphrase: ${BORG_PASSPHRASE}
 
 # Number of seconds between each checkpoint during a long-running
 # backup. See https://borgbackup.readthedocs.io/en/stable/faq.html for
 # details. Defaults to checkpoints every 1800 seconds (30 minutes).
-# checkpoint_interval: 1800
+checkpoint_interval: 60
 
 # Number of backed up bytes between each checkpoint during a
 # long-running backup. Only supported with Borg 2+. See
@@ -181,7 +198,7 @@ repositories:
 # Type of compression to use when creating archives. See
 # http://borgbackup.readthedocs.io/en/stable/usage/create.html for
 # details. Defaults to "lz4".
-# compression: lz4
+compression: zstd,22
 
 # Remote network upload rate limit in kiBytes/second. Defaults to
 # unlimited.
@@ -189,12 +206,12 @@ repositories:
 
 # Number of times to retry a failing backup before giving up. Defaults
 # to 0 (i.e., does not attempt retry).
-# retries: 3
+retries: 3
 
 # Wait time between retries (in seconds) to allow transient issues to
 # pass. Increases after each retry as a form of backoff. Defaults to 0
 # (no wait).
-# retry_wait: 10
+retry_wait: 10
 
 # Directory where temporary files are stored. Defaults to $TMPDIR.
 # temporary_directory: /path/to/tmpdir
@@ -239,7 +256,7 @@ repositories:
 # "{hostname}-{now:%Y-%m-%dT%H:%M:%S.%f}". When running actions like
 # rlist, info, or check, borgmatic automatically tries to match only
 # archives created with this name format.
-# archive_name_format: '{hostname}-documents-{now}'
+archive_name_format: '{prefix}_{now:%Y-%m-%d_%H:%M:%S}'
 
 # A Borg pattern for filtering down the archives used by borgmatic
 # actions that operate on multiple archives. For Borg 1.x, use a shell
@@ -247,7 +264,7 @@ repositories:
 # details. For Borg 2.x, see the output of "borg help match-archives".
 # If match_archives is not specified, borgmatic defaults to deriving
 # the match_archives value from archive_name_format.
-# match_archives: sh:{hostname}-*
+match_archives: sh:{prefix}_*
 
 # Bypass Borg error about a repository that has been moved. Defaults
 # to not bypassing.
@@ -266,18 +283,21 @@ repositories:
 # Note that borgmatic does not perform any validation on these
 # options. Running borgmatic with "--verbosity 2" shows the exact Borg
 # command-line invocation.
-# extra_borg_options:
+extra_borg_options:
     # Extra command-line options to pass to "borg init".
     # init: --extra-option
 
     # Extra command-line options to pass to "borg create".
     # create: --extra-option
+    create: --list --filter=AME --stats --verbose
 
     # Extra command-line options to pass to "borg prune".
     # prune: --extra-option
+    prune: --list --stats --verbose
 
     # Extra command-line options to pass to "borg compact".
     # compact: --extra-option
+    compact: --cleanup-commits --verbose
 
     # Extra command-line options to pass to "borg check".
     # check: --extra-option
@@ -298,13 +318,13 @@ repositories:
 keep_daily: 7
 
 # Number of weekly archives to keep.
-# keep_weekly: 4
+keep_weekly: 4
 
 # Number of monthly archives to keep.
-# keep_monthly: 6
+keep_monthly: 12
 
 # Number of yearly archives to keep.
-# keep_yearly: 1
+keep_yearly: 1
 
 # Deprecated. When pruning or checking archives, only consider archive
 # names starting with this prefix. Borg placeholders can be used. See
@@ -334,6 +354,10 @@ keep_daily: 7
       # "1 month" to run it no more than monthly. Defaults to
       # "always": running this check every time checks are run.
       # frequency: 2 weeks
+checks:
+    - name: repository
+    - name: archives
+    - name: data
 
 # Paths or labels for a subset of the configured "repositories" (see
 # above) on which to run consistency checks. Handy in case some of
@@ -345,7 +369,7 @@ keep_daily: 7
 
 # Restrict the number of checked archives to the last n. Applies only
 # to the "archives" check. Defaults to checking all archives.
-# check_last: 3
+check_last: 7
 
 # Apply color to console output. Can be overridden with --no-color
 # command-line flag. Defaults to true.
@@ -353,83 +377,91 @@ keep_daily: 7
 
 # List of one or more shell commands or scripts to execute before all
 # the actions for each repository.
-# before_actions:
-    # - echo Starting actions.
+before_actions:
+    - echo Starting actions.
 
 # List of one or more shell commands or scripts to execute before
 # creating a backup, run once per repository.
-# before_backup:
-    # - echo Starting a backup.
+before_backup:
+    - echo Starting a backup.
 
 # List of one or more shell commands or scripts to execute before
 # pruning, run once per repository.
-# before_prune:
-    # - echo Starting pruning.
+before_prune:
+    - echo Starting pruning.
 
 # List of one or more shell commands or scripts to execute before
 # compaction, run once per repository.
-# before_compact:
-    # - echo Starting compaction.
+before_compact:
+    - echo Starting compaction.
 
 # List of one or more shell commands or scripts to execute before
 # consistency checks, run once per repository.
-# before_check:
-    # - echo Starting checks.
+before_check:
+    - echo Starting checks.
 
 # List of one or more shell commands or scripts to execute before
 # extracting a backup, run once per repository.
-# before_extract:
-    # - echo Starting extracting.
+before_extract:
+    - echo Starting extracting.
 
 # List of one or more shell commands or scripts to execute after
 # creating a backup, run once per repository.
-# after_backup:
-    # - echo Finished a backup.
+after_backup:
+    - echo Finished a backup.
 
 # List of one or more shell commands or scripts to execute after
 # compaction, run once per repository.
-# after_compact:
-    # - echo Finished compaction.
+after_compact:
+    - echo Finished compaction.
 
 # List of one or more shell commands or scripts to execute after
 # pruning, run once per repository.
-# after_prune:
-    # - echo Finished pruning.
+after_prune:
+    - echo Finished pruning.
 
 # List of one or more shell commands or scripts to execute after
 # consistency checks, run once per repository.
-# after_check:
-    # - echo Finished checks.
+after_check:
+    - echo Finished checks.
 
 # List of one or more shell commands or scripts to execute after
 # extracting a backup, run once per repository.
-# after_extract:
-    # - echo Finished extracting.
+after_extract:
+    - echo Finished extracting.
 
 # List of one or more shell commands or scripts to execute after all
 # actions for each repository.
-# after_actions:
-    # - echo Finished actions.
+after_actions:
+    - echo Finished actions.
 
 # List of one or more shell commands or scripts to execute when an
 # exception occurs during a "create", "prune", "compact", or "check"
 # action or an associated before/after hook.
-# on_error:
-    # - echo Error during create/prune/compact/check.
+on_error:
+    - echo Error during create/prune/compact/check.
 
 # List of one or more shell commands or scripts to execute before
 # running all actions (if one of them is "create"). These are
 # collected from all configuration files and then run once before all
 # of them (prior to all actions).
-# before_everything:
-    # - echo Starting actions.
+before_everything:
+    - echo '******************************************************************************'
+    - echo '******************************************************************************'
+    - echo "\n\n"
+    - echo Starting all actions.
+    - echo "\n"
 
 # List of one or more shell commands or scripts to execute after
 # running all actions (if one of them is "create"). These are
 # collected from all configuration files and then run once after all
 # of them (after any action).
-# after_everything:
-    # - echo Completed actions.
+after_everything:
+    - echo "\n"
+    - echo Completed all actions.
+    - echo "\n\n"
+    - echo '------------------------------------------------------------------------------'
+    - echo "\n\n"
 
 # List of one or more PostgreSQL databases to dump before creating a
 # backup, run once per configuration file. The database dumps are
@@ -879,14 +911,18 @@ keep_daily: 7
     # states.
     # states:
         # - finish
+healthchecks:
+    ping_url: ${HEALTHCHECKS_PING_URL_SYSTEM}
+    ping_body_limit: 0
 
 # Configuration for a monitoring integration with Cronitor. Create an
 # account at https://cronitor.io if you'd like to use this service.
 # See borgmatic monitoring documentation for details.
-# cronitor:
+cronitor:
     # Cronitor ping URL to notify when a backup begins,
     # ends, or errors.
     # ping_url: https://cronitor.link/d3x0c1
+    ping_url: ${CRONITOR_PING_URL_SYSTEM}
 
 # Configuration for a monitoring integration with PagerDuty. Create an
 # account at https://www.pagerduty.com if you'd like to use this
